@@ -1,0 +1,5 @@
+node_modules/
+# The pool is bearer material. It is never committed, and it is never backed up
+# either -- a second copy of a credential is a second spendable copy.
+data/
+.toon-client/
