@@ -1,0 +1,13 @@
+# DENY THE WHOLE CONTEXT, then allow back the three paths the image is made of.
+#
+# This is deliberately the strict direction. The repository's working tree can
+# hold a credential pool (`data/pool.json`) and a live channel store
+# (`.toon-client/`), and both are bearer-adjacent: a pool baked into a layer is a
+# spendable copy of money in a registry, and a channel store baked in is a
+# watermark that goes stale the moment two containers share it. An allowlist
+# cannot be defeated by a new file landing in the tree; a denylist can.
+*
+
+!package.json
+!package-lock.json
+!src

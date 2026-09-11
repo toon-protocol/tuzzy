@@ -159,8 +159,11 @@ units; the hub deals, we do not.
 
 The credentials this repository holds between buying them and handing them out.
 
-Bearer material: a credential is `(serial, signature)` under one **epoch** key,
-single-use, and unrecognisable to the issuer that signed it. Losing the pool
+Bearer material: a credential is `(prepared, signature)` under one **epoch** key,
+single-use, and unrecognisable to the issuer that signed it. `prepared` is the
+randomizer-prefixed serial the signature actually covers — say **prepared** when
+naming what is held, because `verify(key, signature, prepared)` is the check a
+relay will make and the bare serial will not satisfy it. Losing the pool
 loses money that nobody can reissue; copying it creates a second spendable copy
 of the same thing.
 
