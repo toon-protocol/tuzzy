@@ -1,0 +1,20 @@
+{
+  "name": "tuzzy",
+  "private": true,
+  "type": "module",
+  "description": "Buys Anyone Protocol circuit credentials over TOON, in USDC, for a crawler that never handles payment.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.ts'",
+    "sandbox-e2e": "node scripts/sandbox-e2e.ts"
+  },
+  "dependencies": {
+    "@cloudflare/blindrsa-ts": "^0.4.6",
+    "@toon-protocol/client": "^3.0.0"
+  },
+  "bin": {
+    "tuzzy": "./src/tuzzy.ts"
+  }
+}
