@@ -38,6 +38,9 @@ Anyone-routed crawling phase follows Wuzzy's core and tracks Anyone's paid-exit
 rollout — so "done" here means *bought, verified, pooled and takeable*. The
 `take` command is the seam a presenter will use; the presenter is not ours and
 does not exist. This is stated plainly rather than left for someone to discover.
+What this half proves, what it does not, and what Anyone has to ship before a
+credential can be presented to anything is written down once, for them, in
+[`docs/handoff.md`](docs/handoff.md).
 
 **It does not pay source gates.** The crawler's existing x402 payer does that, and
 a TOON-gated source already answers an x402 payer by graceful degradation —
@@ -50,6 +53,49 @@ boundary would become a permanent clause in Wuzzy's trust model —
 ---
 
 ## 2. Quick start
+
+Two ways in, and which you want depends on whether you are running tuzzy or
+changing it.
+
+### Run it: the image
+
+No clone, no Node, and nothing to build. The three commands are `docker run`
+arguments:
+
+```bash
+docker volume create tuzzy-data      # once, and then never delete it — see §5
+
+docker run --rm -v tuzzy-data:/data ghcr.io/toon-protocol/tuzzy status
+docker run --rm -v tuzzy-data:/data \
+  -e TUZZY_CONNECTOR=http://connector:3000 \
+  -e TUZZY_PRICE_CEILING=15000 \
+  -e TUZZY_EVM_PRIVATE_KEY=... -e TUZZY_CHAIN=evm -e TUZZY_RPC_URL=... \
+  ghcr.io/toon-protocol/tuzzy buy
+docker run --rm -v tuzzy-data:/data ghcr.io/toon-protocol/tuzzy take
+```
+
+`status` takes no configuration at all — it reads the pool and the clock — which
+makes it how you check that the mount is the one you meant before a purchase
+depends on it.
+
+**`/data` is the whole of the state, and both files default onto it**: the pool
+at `/data/pool.json` and the channel store at `/data/channels.json`. One volume
+on purpose. An image invites "delete the container and start again", and that
+reflex is only survivable where there is a single thing to keep and it is
+obvious which — so do not point `TUZZY_POOL` or `TUZZY_CHANNEL_STORE` off
+`/data`, and do not run two containers against one volume: two clients on one
+channel is one nonce watermark with two writers (§5).
+
+**A named volume, not a bind mount**, unless you `chown 1000:1000` the host
+directory first. tuzzy runs as the unprivileged `node` user, a bind mount arrives
+owned by root, and the pool is written *after* the bundle is paid for — so an
+unwritable mount does not fail before spending, it fails after.
+
+Pin a version rather than `latest` (`ghcr.io/toon-protocol/tuzzy:0.1`), and roll
+back with the `sha-` tag, which is the one tag that cannot be made to mean a
+different image later.
+
+### Change it: from source
 
 ```bash
 make install
@@ -90,8 +136,18 @@ run derives everything it needs from disk and the clock — there is no in-memor
 copy of the one thing that must not be lost, and nothing to supervise.
 
 ```cron
-*/5 * * * *  cd /srv/tuzzy && make buy >> /var/log/tuzzy.log 2>&1
+*/5 * * * *  docker run --rm --env-file /etc/tuzzy.env -v tuzzy-data:/data ghcr.io/toon-protocol/tuzzy:0.1 buy >> /var/log/tuzzy.log 2>&1
 ```
+
+`--rm` is safe here and `-v tuzzy-data:/data` is what makes it safe: the
+container is the disposable half and the volume is not. An `--env-file` rather
+than `-e` flags because one of those variables is a settlement key and a crontab
+is world-readable. From a checkout the same tick is `cd /srv/tuzzy && make buy`.
+
+Do not stack ticks. A run that is still holding the channel store when the next
+one starts is two writers on one nonce watermark, which is the failure in §5
+arriving on a schedule — five minutes is far longer than a purchase takes, and if
+a tick ever overruns, serialise them (`flock`) rather than shortening the timer.
 
 ### Exit codes are the interface
 
@@ -138,6 +194,10 @@ All environment, because the invocation is the thing an operator edits.
 | `TUZZY_CHANNEL_STORE` | `~/.toon/channels.json` | **Do not delete.** See §5 |
 | `TUZZY_SOCKS_PROXY` | unset | Required for a `.anyone` connector, refused otherwise |
 | `TUZZY_CHAIN` / `TUZZY_RPC_URL` | unset | Our settlement chain and its RPC |
+
+**In the image both state paths default onto the one volume** — `TUZZY_POOL` at
+`/data/pool.json`, `TUZZY_CHANNEL_STORE` at `/data/channels.json`. Nothing else
+in this table changes, and those two are the only defaults the image overrides.
 
 **There is no price setting, and that is deliberate.** The price is read from the
 connector at the moment of purchase; bootstrapping is one `GET`, and a configured
@@ -191,6 +251,17 @@ client that forgets it re-signs at nonces the connector has already banked, and
 every purchase is refused `F01 … nonce does not advance this channel's watermark
 (replay)` until it resyncs. The client's own documentation puts it plainly: never
 delete a channel store for a live channel.
+
+**Run as an image, all of that is one volume, and the volume is what you are
+protecting.** The image is disposable and any build of the same tag replaces it;
+`tuzzy-data` is neither. So `docker rm` is free, `docker run --rm` is free, and
+`docker volume rm tuzzy-data` — or a `docker compose down -v`, which takes
+volumes with it — is the one command in that list that destroys money and a
+watermark at the same time. `/data` is created `0700` and owned by the
+unprivileged user, and the pool inside it `0600`, which is a guard against
+another process on the box, not against that command. There is deliberately no
+backup path (see above), so the volume is the only copy, and it does not come
+back.
 
 **The pool is shallow on purpose, and its floor is a rate outage, not a refill.**
 Buy little and often, because depth concentrates loss and burns more at an epoch
